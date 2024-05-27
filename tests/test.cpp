@@ -1,19 +1,46 @@
-#include <print.hpp>
-
+#include <Account.h>
+#include <Transaction.h>
 #include <gtest/gtest.h>
 
-TEST(Print, InFileStream)
-{
-  std::string filepath = "file.txt";
-  std::string text = "hello";
-  std::ofstream out{filepath};
+TEST(Banking, Account) {
+  Account some_bal(0,0);
+  
+  EXPECT_EQ(some_bal.GetBalance(), 0);
+  
+  EXPECT_THROW(some_bal.ChangeBalance(123), std::runtime_error);
+  
+  some_bal.Lock();
+  
+  some_bal.ChangeBalance(123);
+  EXPECT_EQ(some_bal.GetBalance(), 123);
+  
+  EXPECT_THROW(some_bal.Lock(), std::runtime_error);
+}
 
-  print(text, out);
-  out.close();
+TEST(Banking, Transaction) {
+  int some_money = 5000, some_more_money = 0, fee = 100;
+  
+  Account rich(0,some_money), poor(1,some_more_money);
+  Transaction transaction;
 
-  std::string result;
-  std::ifstream in{filepath};
-  in >> result;
+  EXPECT_EQ(transaction.fee(), 1);
 
-  EXPECT_EQ(result, text);
+  transaction.set_fee(fee);
+
+  EXPECT_EQ(transaction.fee(), fee);
+
+  EXPECT_THROW(transaction.Make(rich, rich, 1), std::logic_error);
+  EXPECT_THROW(transaction.Make(rich, poor, -1), std::invalid_argument);
+  EXPECT_THROW(transaction.Make(rich, poor, 99), std::logic_error);
+
+  EXPECT_EQ(transaction.Make(rich, poor, 150), false);
+
+  EXPECT_EQ(transaction.Make(rich, poor, 1000), true);
+  EXPECT_EQ(poor.GetBalance(), 1000); 
+  EXPECT_EQ(rich.GetBalance(), 3900);
+
+  EXPECT_EQ(transaction.Make(rich, poor, 3900), false);
+  
+  EXPECT_EQ(poor.GetBalance(), 1000); 
+  EXPECT_EQ(rich.GetBalance(), 3900);
 }
