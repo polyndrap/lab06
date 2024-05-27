@@ -1,154 +1,91 @@
-# Homework
-Представьте, что вы стажер в компании "Formatter Inc.".
+# Подготовка
 
-# Задание 1
-Вам поручили перейти на систему автоматизированной сборки CMake. Исходные файлы находятся в директории formatter_lib. В этой директории находятся файлы для статической библиотеки formatter. Создайте CMakeList.txt в директории formatter_lib, с помощью которого можно будет собирать статическую библиотеку formatter.
+# Test_Account.cpp
 ```
-$ cmake --version
-cmake version 3.20
+#include <Account.h>
+#include <gtest/gtest.h>
 
-CMake suite maintained and supported by Kitware (kitware.com/cmake).
-$ cd ./formatter_lib/
-$ cmake -H. -B_build
-$ cmake --build ./_build
-```
-Вывод:
-```
--- The C compiler identification is GNU 12.2.0
--- The CXX compiler identification is GNU 12.2.0
--- Detecting C compiler ABI info
--- Detecting C compiler ABI info - done
--- Check for working C compiler: /usr/bin/cc - skipped
--- Detecting C compile features
--- Detecting C compile features - done
--- Detecting CXX compiler ABI info
--- Detecting CXX compiler ABI info - done
--- Check for working CXX compiler: /usr/bin/c++ - skipped
--- Detecting CXX compile features
--- Detecting CXX compile features - done
--- Configuring done
--- Generating done
--- Build files have been written to: /home/debain/kostrub1n/workspace/projects/lab03/formatter_lib/_build
-```
+TEST(Account, Banking){
+	Account test(0,0);
+	
+	ASSERT_EQ(test.GetBalance(), 0);
+	
+	ASSERT_THROW(test.ChangeBalance(100), std::runtime_error);
+	
+	test.Lock();
+	
+	ASSERT_NO_THROW(test.ChangeBalance(100));
+	
+	ASSERT_EQ(test.GetBalance(), 100);
 
-```
-$ cd ../formatter_ex_lib/
-$ cmake -H. -B_build
-$ cmake --build ./_build
-$  g++ -c formatter_ex.cpp -o formatter_ex.o
-$  ar rcs libformatter_ex.a formatter_ex.o
-```
-# Содержимое CMakeLists.txt:
+	ASSERT_THROW(test.Lock(), std::runtime_error);
 
+	test.Unlock();
+	ASSERT_THROW(test.ChangeBalance(100), std::runtime_error);
+}
 ```
-cmake_minimum_required(VERSION 3.25)
+# test_Transaction.cpp
+```
+#include <Account.h>
+#include <Transaction.h>
+#include <gtest/gtest.h>
 
-project(formatter_ex)
+TEST(Transaction, Banking){
+	const int base_A = 5000, base_B = 5000, base_fee = 100;
+	
+	Account Alice(0,base_A), Bob(1,base_B);
+	Transaction test_tran;
 
-set(CMAKE_CXX_STANDARD 20)
+	ASSERT_EQ(test_tran.fee(), 1);
+	test_tran.set_fee(base_fee);
+	ASSERT_EQ(test_tran.fee(), base_fee);
+
+	ASSERT_THROW(test_tran.Make(Alice, Alice, 1000), std::logic_error);
+	ASSERT_THROW(test_tran.Make(Alice, Bob, -50), std::invalid_argument);
+	ASSERT_THROW(test_tran.Make(Alice, Bob, 50), std::logic_error);
+	if (test_tran.fee()*2-1 >= 100)
+		ASSERT_EQ(test_tran.Make(Alice, Bob, test_tran.fee()*2-1), false);
+
+	Alice.Lock();
+	ASSERT_THROW(test_tran.Make(Alice, Bob, 1000), std::runtime_error);
+	Alice.Unlock();
+
+	ASSERT_EQ(test_tran.Make(Alice, Bob, 1000), true);
+	ASSERT_EQ(Bob.GetBalance(), base_B+1000);	
+	ASSERT_EQ(Alice.GetBalance(), base_A-1000-base_fee);
+
+	ASSERT_EQ(test_tran.Make(Alice, Bob, 3900), false);
+	ASSERT_EQ(Bob.GetBalance(), base_B+1000);	
+	ASSERT_EQ(Alice.GetBalance(), base_A-1000-base_fee);
+}
+```
+build.yml
+```
+cmake_minimum_required(VERSION 3.22)
+
+set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Установим путь к директории formatter_ex_lib
-set(CMAKE_CURRENT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/formatter_ex_lib)
+option(BUILD_TESTS "Build tests" OFF)
 
-# Явно перечислим исходные файлы
-set(SOURCES
-    formatter_ex.cpp
-)
+if(BUILD_TESTS)                   
+  add_compile_options(--coverage) 
+endif()
 
-# Создадим библиотеку formatter_ex
-add_library(formatter_ex STATIC ${SOURCES})
+project (banking)
 
-# Установим директорию для поиска заголовочных файлов
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/formatter_lib)
+add_library(banking STATIC ${CMAKE_CURRENT_SOURCE_DIR}/banking/Transaction.cpp ${CMAKE_CURRENT_SOURCE_DIR}/banking/Account.cpp)
+target_include_directories(banking PUBLIC
+${CMAKE_CURRENT_SOURCE_DIR}/banking )
 
-# Добавим зависимость от библиотеки formatter
-target_link_libraries(formatter_ex formatter)
+target_link_libraries(banking gcov)
+
+if(BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(third-party/gtest)
+  file(GLOB BANKING_TEST_SOURCES tests/*.cpp)
+  add_executable(check ${BANKING_TEST_SOURCES})
+  target_link_libraries(check banking gtest_main)
+  add_test(NAME check COMMAND check)
+endif()
 ```
-# Задание 3
-Конечно же ваша компания предоставляет примеры использования своих библиотек. Чтобы продемонстрировать как работать с библиотекой formatter_ex, вам необходимо создать два CMakeList.txt для двух простых приложений:
-
-hello_world, которое использует библиотеку formatter_ex; solver, приложение которое испольует статические библиотеки formatter_ex и solver_lib.
-
-1. Hello_world_application
-```
-$ cd ../hello_world_application
-$ cmake -H. -B_build
-$ cmake --build _build
-```
-Содержимое CMakeLists.txt:
-```
-cmake_minimum_required(VERSION 3.25)
-									 # Если версия установленой программы
-									 # старее указаной, произайдёт аварийный выход.
-
-project(hello_world)				 # Название проекта
-
-set(SOURCE_EXE hello_world.cpp)			 # Установка переменной со списком исходников
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../formatter_ex_lib/)
-
-add_executable(main ${SOURCE_EXE})	 # Создает исполняемый файл с именем main
-
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../formatter_ex_lib/ formatter_ex_lib)
-
-target_link_libraries(main formatter_ex_lib)		 # Линковка программы с библиотекой
-```
-Вывод:
--- The C compiler identification is GNU 12.2.0
--- The CXX compiler identification is GNU 12.2.0
--- Detecting C compiler ABI info
--- Detecting C compiler ABI info - done
--- Check for working C compiler: /usr/bin/cc - skipped
--- Detecting C compile features
--- Detecting C compile features - done
--- Detecting CXX compiler ABI info
--- Detecting CXX compiler ABI info - done
--- Check for working CXX compiler: /usr/bin/c++ - skipped
--- Detecting CXX compile features
--- Detecting CXX compile features - done
--- Configuring done
--- Generating done
--- Build files have been written to: /home/debain/kostrub1n/workspace/projects/lab03/hello_world_application/_build
-2. Solver_application
-```
-$ cd ../solver_lib/
-$ cmake -H. -B_build
-$ cmake --build _build
-```
-CMakeLists.txt
-```
-cmake_minimum_required(VERSION 3.25)
-
-project(solver)				# Название проекта
-
-set(SOURCE_EXE equation.cpp)			# Установка переменной со списком исходников
-
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../formatter_ex_lib/"
-					"${CMAKE_CURRENT_SOURCE_DIR}/../solver_lib/")
-
-add_executable(main ${SOURCE_EXE})	# Создает исполняемый файл с именем main
-
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../formatter_ex_lib/ formatter_ex_lib)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../solver_lib/ solver_lib)
-
-target_link_libraries(main formatter_ex_lib solver_lib)		# Линковка программы с библиотекой
-```
-Вывод
--- The C compiler identification is GNU 12.2.0
--- The CXX compiler identification is GNU 12.2.0
--- Detecting C compiler ABI info
--- Detecting C compiler ABI info - done
--- Check for working C compiler: /usr/bin/cc - skipped
--- Detecting C compile features
--- Detecting C compile features - done
--- Detecting CXX compiler ABI info
--- Detecting CXX compiler ABI info - done
--- Check for working CXX compiler: /usr/bin/c++ - skipped
--- Detecting CXX compile features
--- Detecting CXX compile features - done
--- Configuring done
--- Generating done
--- Build files have been written to: /home/debain/kostrub1n/workspace/projects/lab03/hello_world_application/_build
-
